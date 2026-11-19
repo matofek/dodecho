@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOD Type-Tester — Kinetické Echo & Kamera 20×15</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Syne:wght@700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; user-select: none; }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #ffffff;
+            font-family: 'Inter', sans-serif;
+            color: #111827;
+        }
+        canvas#mainCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+            inset: 0;
+            z-index: 2;
+            cursor: grab;
+        }
+        canvas#mainCanvas:active {
+            cursor: grabbing;
+        }
+        #sidebar::-webkit-scrollbar { width: 5px; }
+        #sidebar::-webkit-scrollbar-track { background: transparent; }
+        #sidebar::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 10px; }
+        input[type="range"] {
+            accent-color: #111827;
+            height: 5px;
+            background: #e4e4e7;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Horné plávajúce tlačidlá -->
+<div id="topControls" class="fixed top-3 left-3 z-30 flex items-center gap-2 flex-wrap transition-opacity duration-300">
+    <button id="toggleSidebarBtn" class="px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold rounded-lg shadow-md transition">
+        ◀ Skryť panel
+    </button>
+    <button id="resetViewBtn" class="px-3 py-2 bg-white/90 hover:bg-white text-zinc-800 text-xs font-semibold rounded-lg shadow-md border border-zinc-200 transition">
+        Vycentrovať (100%)
+    </button>
+    <button id="fullscreenBtn" class="px-3 py-2 bg-white/90 hover:bg-white text-zinc-800 text-xs font-semibold rounded-lg shadow-md border border-zinc-200 transition" title="Prepnúť celú obrazovku (F)">
+        ⛶ Celá obrazovka
+    </button>
+    <button id="kioskBtn" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-md transition" title="Skryť celé rozhranie pre výstavu (H)">
+        ✨ Čistý režim (H)
+    </button>
+</div>
+
+<!-- Krátka nápoveda pri prepnutí do čistého režimu -->
+<div id="kioskHint" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 px-4 py-2 bg-zinc-900/90 text-white text-xs font-medium rounded-full shadow-lg pointer-events-none opacity-0 transition-opacity duration-500">
+    Čistý režim — stlač kláves H alebo Esc pre návrat ovládania
+</div>
+
+<!-- Skryté video pre kameru -->
+<video id="webcamVideo" autoplay playsinline muted class="hidden"></video>
+
+<!-- Ľavý ovládací panel -->
+<aside id="sidebar" class="fixed top-14 left-3 bottom-3 w-[385px] max-w-[94vw] bg-white/95 backdrop-blur-md border border-zinc-200 rounded-xl shadow-2xl z-20 overflow-y-auto p-4 space-y-4 transition-transform duration-300">
+    
+    <div class="border-b border-zinc-200 pb-3 flex items-center justify-between">
+        <div>
+            <h1 class="text-sm font-extrabold tracking-tight text-zinc-900">KINETICKÉ ECHO • KAMERA 20×15</h1>
+            <p class="text-[11px] text-zinc-500">Smerový rozklad v 1:2 dlažbe riadený hodnotou čiernej</p>
+        </div>
+        <span id="camStatusBadge" class="px-2 py-0.5 text-[10px] font-bold bg-zinc-200 text-zinc-700 rounded">MANUÁLNE</span>
+    </div>
+
+    <!-- 1. KAMERA & MATICA 20x15 (ODTIENE ŠEDEJ) -->
+    <section class="space-y-3 border-b border-zinc-200 pb-4">
+        <div class="flex items-center justify-between">
+            <h2 class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">1. Kamera & Mapa Čiernej v Dlažbe (1:1)</h2>
+            <span id="gridResLabel" class="text-[10px] font-mono font-bold text-zinc-600">Väzba 1:2</span>
+        </div>
+
+        <div class="flex gap-2">
+            <button type="button" id="toggleCameraBtn" class="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center gap-1.5">
+                <span>📷 Spustiť kameru</span>
+            </button>
+            <button type="button" id="toggleSimBtn" class="py-2 px-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[11px] font-semibold rounded-lg border border-zinc-300 transition" title="Simulovať tmavú siluetu myšou bez kamery">
+                🖐️ Simulácia myšou
+            </button>
+        </div>
+
+        <!-- Výber konkrétnej kamery (napr. Insta360 vs. vstavaná) -->
+        <div class="flex gap-1.5 items-center">
+            <select id="cameraSelect" class="flex-1 px-2 py-1.5 text-xs font-medium bg-zinc-50 border border-zinc-300 rounded-lg focus:outline-none focus:border-zinc-900 truncate">
+                <option value="">Predvolená kamera</option>
+            </select>
+            <button type="button" id="refreshCamerasBtn" class="px-2 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold rounded-lg border border-zinc-300 transition" title="Obnoviť zoznam pripojených kamier">
+                🔄
+            </button>
+        </div>
+
+        <!-- Živý náhľad rozpixelovanej matice priamo v 1:2 dlažbe -->
+        <div id="camMonitorWrap" class="bg-zinc-950 p-2 rounded-lg border border-zinc-800 space-y-1.5">
+            <div class="flex items-center justify-between text-[10px] text-zinc-400">
+                <span>Náhľad dlažby (Ťahaním vyber ROI výrez)</span>
+                <div class="flex items-center gap-2">
+                    <span id="avgDarknessVal" class="font-mono text-zinc-200">Čierna: 0%</span>
+                    <button type="button" id="resetRoiBtn" class="px-1.5 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-[9px] font-bold">Celý záber</button>
+                </div>
+            </div>
+            <canvas id="camPreviewCanvas" width="240" height="150" class="w-full h-28 rounded bg-white border border-zinc-700 block cursor-crosshair"></canvas>
+            <div class="flex items-center justify-between text-[9px] font-mono text-zinc-400">
+                <span id="roiCoordsVal">ROI: 0%, 0% → 100%, 100%</span>
+                <label class="flex items-center gap-1 text-zinc-300 cursor-pointer font-sans">
+                    <input type="checkbox" id="showRoiRaw" class="rounded w-3 h-3 accent-emerald-500">
+                    <span>Živý obraz v náhľade</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Výber parametrov, ktoré ovláda hodnota čiernej -->
+        <div class="bg-zinc-50 p-2.5 rounded-lg border border-zinc-200 space-y-1.5">
+            <div class="text-[11px] font-bold text-zinc-800">Čo má hodnota čiernej v bloku meniť:</div>
+            <label class="flex items-center justify-between text-xs font-medium text-zinc-700 cursor-pointer">
+                <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="modSpacing" checked class="rounded w-3.5 h-3.5 accent-zinc-900">
+                    <span>Rozostup smerových ozvien</span>
+                </span>
+                <span class="text-[10px] font-mono text-zinc-400">0 → Max</span>
+            </label>
+            <label class="flex items-center justify-between text-xs font-medium text-zinc-700 cursor-pointer">
+                <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="modCopies" checked class="rounded w-3.5 h-3.5 accent-zinc-900">
+                    <span>Počet vrstiev ozveny v tehle</span>
+                </span>
+                <span class="text-[10px] font-mono text-zinc-400">0 → Max</span>
+            </label>
+            <label class="flex items-center justify-between text-xs font-medium text-zinc-700 cursor-pointer">
+                <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="modOutline" class="rounded w-3.5 h-3.5 accent-zinc-900">
+                    <span>Prechod Plné jadro ↔ Čistý obrys</span>
+                </span>
+                <span class="text-[10px] font-mono text-zinc-400">Plné → Obrys</span>
+            </label>
+            <label class="flex items-center justify-between text-xs font-medium text-zinc-700 cursor-pointer">
+                <span class="flex items-center gap-1.5">
+                    <input type="checkbox" id="modBrickShift" class="rounded w-3.5 h-3.5 accent-zinc-900">
+                    <span>Smerový posun rezu v tehle</span>
+                </span>
+                <span class="text-[10px] font-mono text-zinc-400">0 → Posun</span>
+            </label>
+        </div>
+
+        <!-- Kalibrácia čiernej a vyhladenie -->
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="font-semibold text-zinc-700">Prah bielej (Orez)</span>
+                    <span id="whiteGateVal" class="font-mono font-bold text-zinc-900">25%</span>
+                </div>
+                <input type="range" id="whiteGate" min="0" max="75" step="1" value="25" class="w-full">
+            </div>
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="font-semibold text-zinc-700">Zosilnenie čiernej</span>
+                    <span id="blackGainVal" class="font-mono font-bold text-zinc-900">1.6×</span>
+                </div>
+                <input type="range" id="blackGain" min="5" max="35" step="1" value="16" class="w-full">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="font-semibold text-zinc-700">Veľkosť tehličiek</span>
+                    <span id="camColsVal" class="font-mono font-bold text-zinc-900">48 px</span>
+                </div>
+                <select id="camResolution" class="w-full px-2 py-1 text-xs font-medium bg-zinc-50 border border-zinc-300 rounded-lg">
+                    <option value="84">Veľké tehly (84 px)</option>
+                    <option value="48" selected>Stredné tehly (48 px)</option>
+                    <option value="32">Menšie tehly (32 px)</option>
+                    <option value="20">Jemné tehly (20 px)</option>
+                </select>
+            </div>
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="font-semibold text-zinc-700">Tlmenie (Smoothing)</span>
+                    <span id="camSmoothVal" class="font-mono font-bold text-zinc-900">75%</span>
+                </div>
+                <input type="range" id="camSmooth" min="0" max="95" step="5" value="75" class="w-full">
+            </div>
+        </div>
+
+        <div class="flex flex-wrap gap-3 pt-0.5">
+            <label class="flex items-center gap-1.5 text-xs font-medium text-zinc-700 cursor-pointer">
+                <input type="checkbox" id="mirrorCam" checked class="rounded w-3.5 h-3.5 accent-zinc-900">
+                <span>Zrkadliť obraz</span>
+            </label>
+            <label class="flex items-center gap-1.5 text-xs font-medium text-zinc-700 cursor-pointer">
+                <input type="checkbox" id="invertCam" class="rounded w-3.5 h-3.5 accent-zinc-900">
+                <span>Invertovať (Biela ↔ Čierna)</span>
+            </label>
+            <label class="flex items-center gap-1.5 text-xs font-medium text-zinc-700 cursor-pointer">
+                <input type="checkbox" id="showCamGridOverlay" class="rounded w-3.5 h-3.5 accent-zinc-900">
+                <span>Zobraziť odtiene šedej v dlažbe (1:1)</span>
+            </label>
+            <label class="flex items-center gap-1.5 text-xs font-medium text-zinc-700 cursor-pointer">
+                <input type="checkbox" id="showBrickPercent" checked class="rounded w-3.5 h-3.5 accent-zinc-900">
+                <span>Zobraziť % čiernej v tehličkách</span>
+            </label>
+        </div>
+    </section>
+
+    <!-- 2. PARAMETRE KINETICKÉHO ECHA -->
+    <section class="space-y-3 border-b border-zinc-200 pb-4">
+        <h2 class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">2. Parametre Kinetického Echa (Max)</h2>
+
+        <div>
+            <div class="flex justify-between text-xs mb-1">
+                <span class="font-semibold text-zinc-700">Max. rozostup ozvien</span>
+                <span id="param1Val" class="font-mono font-bold text-zinc-900">120%</span>
+            </div>
+            <input type="range" id="param1" min="0" max="300" step="5" value="120" class="w-full">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="font-semibold text-zinc-700">Počet vrstiev</span>
+                    <span id="param2Val" class="font-mono font-bold text-zinc-900">5 vrstiev</span>
+                </div>
+                <input type="range" id="param2" min="1" max="14" step="1" value="5" class="w-full">
+            </div>
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="font-semibold text-zinc-700">Max. prechod na obrys</span>
+                    <span id="param3Val" class="font-mono font-bold text-zinc-900">85%</span>
+                </div>
+                <input type="range" id="param3" min="0" max="100" step="5" value="85" class="w-full">
+            </div>
+        </div>
+
+        <div>
+            <div class="flex justify-between text-xs mb-1">
+                <span class="font-semibold text-zinc-700">Hrúbka línie ozveny</span>
+                <span id="outlineThickVal" class="font-mono font-bold text-zinc-900">3 px</span>
+            </div>
+            <input type="range" id="outlineThick" min="1" max="16" step="1" value="3" class="w-full">
+        </div>
+
+        <div class="pt-0.5">
+            <label class="flex items-center gap-1.5 text-xs font-medium text-zinc-700 cursor-pointer">
+                <input type="checkbox" id="echoGradient" checked class="rounded w-3.5 h-3.5 accent-zinc-900">
+                <span>Povoliť gradient v ozvenách (blednutie vrstiev)</span>
+            </label>
+        </div>
+    </section>
+
+    <!-- 3. TEXT A PÍSMO -->
+    <section class="space-y-3 border-b border-zinc-200 pb-4">
+        <h2 class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">3. Text & Predloha</h2>
+
+        <div class="flex gap-1">
+            <button type="button" data-sample="OK." class="sample-btn flex-1 py-1 text-[10px] font-bold bg-zinc-100 hover:bg-zinc-200 rounded">OK.</button>
+            <button type="button" data-sample="ECHO&#10;20×15" class="sample-btn flex-1 py-1 text-[10px] font-bold bg-zinc-100 hover:bg-zinc-200 rounded">ECHO</button>
+            <button type="button" data-sample="123&#10;456" class="sample-btn flex-1 py-1 text-[10px] font-bold bg-zinc-100 hover:bg-zinc-200 rounded">123 456</button>
+            <button type="button" data-sample="DOD&#10;2026" class="sample-btn flex-1 py-1 text-[10px] font-bold bg-zinc-100 hover:bg-zinc-200 rounded">DOD 26</button>
+            <button type="button" data-sample="ŠUP&#10;KOŠICE" class="sample-btn flex-1 py-1 text-[10px] font-bold bg-zinc-100 hover:bg-zinc-200 rounded">ŠUP KE</button>
+        </div>
+
+        <div>
+            <textarea id="textInput" rows="2" class="w-full px-2.5 py-1.5 text-sm font-bold bg-zinc-50 border border-zinc-300 rounded-lg focus:outline-none focus:border-zinc-900 resize-y">ŠUP
+KOŠICE</textarea>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+            <div>
+                <label class="block text-xs font-semibold text-zinc-700 mb-1">Základné písmo</label>
+                <select id="fontFamily" class="w-full px-2 py-1.5 text-xs font-medium bg-zinc-50 border border-zinc-300 rounded-lg">
+                    <option value="'Inter', sans-serif" selected>Inter (Grotesk)</option>
+                    <option value="'Syne', sans-serif">Syne ExtraBold</option>
+                    <option value="'Space Grotesk', sans-serif">Space Grotesk</option>
+                    <option value="Impact, sans-serif">Impact</option>
+                    <option value="Georgia, serif">Georgia Serif</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-zinc-700 mb-1">Vlastný font (.ttf/.otf)</label>
+                <input type="file" id="fontUpload" accept=".ttf,.otf,.woff,.woff2" class="w-full text-[10px] file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-900 file:text-white hover:file:bg-zinc-700 cursor-pointer">
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="font-semibold text-zinc-700">Veľkosť</span>
+                    <span id="fontSizeVal" class="font-mono font-bold text-zinc-900">260 px</span>
+                </div>
+                <input type="range" id="fontSize" min="90" max="560" step="5" value="260" class="w-full">
+            </div>
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="font-semibold text-zinc-700">Tracking</span>
+                    <span id="trackingVal" class="font-mono font-bold text-zinc-900">0 px</span>
+                </div>
+                <input type="range" id="tracking" min="-35" max="90" step="1" value="0" class="w-full">
+            </div>
+        </div>
+    </section>
+
+    <!-- 4. SKRYTÁ MATICA DLAŽBY (1:2) -->
+    <section class="space-y-3 border-b border-zinc-200 pb-4">
+        <h2 class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">4. Skrytá Osnova Dlažby (1:2)</h2>
+
+        <div>
+            <div class="flex justify-between text-xs mb-1">
+                <span class="font-semibold text-zinc-700">Mierka modulu dlažby</span>
+                <span id="gridScaleVal" class="font-mono font-bold text-zinc-900">48 px</span>
+            </div>
+            <input type="range" id="gridScale" min="16" max="150" step="2" value="48" class="w-full">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="font-semibold text-zinc-700">Posun osnovy X/Y</span>
+                    <span id="gridPhaseVal" class="font-mono font-bold text-zinc-900">0 px</span>
+                </div>
+                <input type="range" id="gridPhase" min="-100" max="100" step="2" value="0" class="w-full">
+            </div>
+            <div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="font-semibold text-zinc-700">Uhol dlažby</span>
+                    <span id="gridAngleVal" class="font-mono font-bold text-zinc-900">0°</span>
+                </div>
+                <input type="range" id="gridAngle" min="-45" max="45" step="1" value="0" class="w-full">
+            </div>
+        </div>
+
+        <div class="flex flex-wrap gap-3 pt-1">
+            <label class="flex items-center gap-1.5 text-xs font-medium text-zinc-700 cursor-pointer">
+                <input type="checkbox" id="showGrid" class="rounded w-3.5 h-3.5 accent-zinc-900">
+                <span>Zobraziť skrytú dlažbu (1:2)</span>
+            </label>
+            <label class="flex items-center gap-1.5 text-xs font-medium text-zinc-700 cursor-pointer">
+                <input type="checkbox" id="animatePhase" class="rounded w-3.5 h-3.5 accent-zinc-900">
+                <span>Plynulé plávanie osnovy</span>
+            </label>
+        </div>
+    </section>
+
+    <!-- 5. FAREBNÁ ESTETIKA -->
+    <section class="space-y-2.5 pb-1">
+        <h2 class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">5. Farby & Paleta</h2>
+        <div class="grid grid-cols-4 gap-1.5">
+            <button type="button" data-theme="bw" class="theme-btn py-1.5 px-2 text-[10px] font-bold rounded border border-zinc-300 bg-white text-black">ČB Čistá</button>
+            <button type="button" data-theme="shamil" class="theme-btn py-1.5 px-2 text-[10px] font-bold rounded border border-zinc-800 bg-zinc-950 text-[#f24423]">Ukážka 1</button>
+            <button type="button" data-theme="heisler" class="theme-btn py-1.5 px-2 text-[10px] font-bold rounded border border-stone-400 bg-[#dcd5c5] text-zinc-900">Ukážka 2</button>
+            <button type="button" data-theme="sup" class="theme-btn py-1.5 px-2 text-[10px] font-bold rounded border border-blue-800 bg-white text-[#1d61a1]">ŠUP KE</button>
+        </div>
+        <div class="grid grid-cols-3 gap-2 pt-1">
+            <label class="flex flex-col gap-1 text-[10px] font-semibold text-zinc-600">
+                <span>Pozadie</span>
+                <input type="color" id="bgColorPicker" value="#ffffff" class="w-full h-7 rounded cursor-pointer border border-zinc-300 bg-transparent">
+            </label>
+            <label class="flex flex-col gap-1 text-[10px] font-semibold text-zinc-600">
+                <span>Jadro písma</span>
+                <input type="color" id="fgColorPicker" value="#09090b" class="w-full h-7 rounded cursor-pointer border border-zinc-300 bg-transparent">
+            </label>
+            <label class="flex flex-col gap-1 text-[10px] font-semibold text-zinc-600">
+                <span>Farba ozvien</span>
+                <input type="color" id="accentColorPicker" value="#09090b" class="w-full h-7 rounded cursor-pointer border border-zinc-300 bg-transparent">
+            </label>
+        </div>
+    </section>
+
+</aside>
+
+<canvas id="mainCanvas"></canvas>
+
+<script>
+const mainCanvas = document.getElementById('mainCanvas');
+const ctx = mainCanvas.getContext('2d');
+
+// Pomocné plátna pre výpočty
+const srcCanvas = document.createElement('canvas');
+const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
+
+const workCanvas = document.createElement('canvas');
+const workCtx = workCanvas.getContext('2d', { willReadFrequently: true });
+
+// Malé plátno pre vzorkovanie kamery na maticu 20x15
+const camSampleCanvas = document.createElement('canvas');
+const camSampleCtx = camSampleCanvas.getContext('2d', { willReadFrequently: true });
+const camPreviewCanvas = document.getElementById('camPreviewCanvas');
+const camPreviewCtx = camPreviewCanvas.getContext('2d');
+const webcamVideo = document.getElementById('webcamVideo');
+
+const THEMES = {
+    bw:      { bg: '#ffffff', fg: '#09090b', accent: '#09090b', grid: 'rgba(0,0,0,0.12)' },
+    shamil:  { bg: '#0b0b0c', fg: '#f04124', accent: '#f04124', grid: 'rgba(255,255,255,0.12)' },
+    heisler: { bg: '#ddd6c7', fg: '#111111', accent: '#5ea8a0', grid: 'rgba(0,0,0,0.14)' },
+    sup:     { bg: '#ffffff', fg: '#1d61a1', accent: '#e94f35', grid: 'rgba(29,97,161,0.15)' }
+};
+
+const state = {
+    theme: 'bw',
+    customColors: {
+        bg: '#ffffff',
+        fg: '#09090b',
+        accent: '#09090b',
+        grid: 'rgba(0,0,0,0.12)'
+    },
+    panX: window.innerWidth > 768 ? 425 : 25,
+    panY: 110,
+    zoom: 1.0,
+    isDragging: false,
+    dragStartX: 0,
+    dragStartY: 0,
+    customFontName: null,
+    phaseAnim: 0,
+    animId: null,
+
+    // Kamera & Mapa čiernej priamo pre jednotlivé 1:2 tehličky
+    camActive: false,
+    simActive: false,
+    camStream: null,
+    selectedDeviceId: '',
+    brickDarknessMap: new Map(), // Kľúč "blockCol_blockRow_subId" -> vyhladená hodnota čiernej [0..1]
+    mouseNormX: 0.5,
+    mouseNormY: 0.5,
+    simTime: 0,
+
+    // Region of Interest (ROI) v normovaných súradniciach kamery (0..1)
+    roi: { x: 0, y: 0, w: 1, h: 1 },
+    roiDragging: false,
+    roiStartX: 0,
+    roiStartY: 0,
+
+    // Cache pre rýchle vykresľovanie základného písma pri 60 FPS
+    glyphCacheKey: '',
+    coreMask: null,
+    outlineMask: null,
+    glyphBounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 }
+};
+
+// Pomocná funkcia pre kontrastnú farbu mriežky podľa jasu pozadia
+function computeGridStrokeColor(hexBg) {
+    const clean = hexBg.replace('#', '');
+    if (clean.length !== 6) return 'rgba(0,0,0,0.12)';
+    const r = parseInt(clean.slice(0, 2), 16);
+    const g = parseInt(clean.slice(2, 4), 16);
+    const b = parseInt(clean.slice(4, 6), 16);
+    const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luma < 0.45 ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';
+}
+
+// Dotaz na našu 1:2 parketovú dlažbu v ľubovoľnom bode (x, y)
+function queryParquetBrick(x, y, unit, phasePx, angleRad, originX, originY) {
+    const dx = x - originX;
+    const dy = y - originY;
+    const cos = Math.cos(-angleRad);
+    const sin = Math.sin(-angleRad);
+    const lx = dx * cos - dy * sin + phasePx;
+    const ly = dx * sin + dy * cos + phasePx * 0.7;
+
+    const colW = unit * 3;
+    const rowH = unit * 2;
+    const blockCol = Math.floor(lx / colW);
+    const blockRow = Math.floor(ly / rowH);
+    const localX = ((lx % colW) + colW) % colW;
+    const localY = ((ly % rowH) + rowH) % rowH;
+
+    const isEven = ((blockRow % 2) + 2) % 2 === 0;
+    let isHoriz = true;
+    let bx = 0, by = 0, bw = 0, bh = 0, subId = 0;
+
+    if (isEven) {
+        if (localX < unit * 2) {
+            isHoriz = true;
+            bx = blockCol * colW;
+            bw = unit * 2;
+            bh = unit;
+            if (localY < unit) {
+                by = blockRow * rowH;
+                subId = 0;
+            } else {
+                by = blockRow * rowH + unit;
+                subId = 1;
+            }
+        } else {
+            isHoriz = false;
+            bx = blockCol * colW + unit * 2;
+            by = blockRow * rowH;
+            bw = unit;
+            bh = unit * 2;
+            subId = 2;
+        }
+    } else {
+        if (localX < unit) {
+            isHoriz = false;
+            bx = blockCol * colW;
+            by = blockRow * rowH;
+            bw = unit;
+            bh = unit * 2;
+            subId = 0;
+        } else {
+            isHoriz = true;
+            bx = blockCol * colW + unit;
+            bw = unit * 2;
+            bh = unit;
+            if (localY < unit) {
+                by = blockRow * rowH;
+                subId = 1;
+            } else {
+                by = blockRow * rowH + unit;
+                subId = 2;
+            }
+        }
+    }
+
+    return { isHoriz, bx, by, bw, bh, blockCol, blockRow, subId };
+}
+
+// Vykreslenie tenkej obrysovej siete 1:2 parketovej dlažby
+function drawParquetGridOverlay(targetCtx, W, H, unit, phasePx, angleRad, strokeColor) {
+    targetCtx.save();
+    targetCtx.translate(W / 2, H / 2);
+    targetCtx.rotate(angleRad);
+    targetCtx.translate(-phasePx, -phasePx * 0.7);
+    targetCtx.strokeStyle = strokeColor;
+    targetCtx.lineWidth = 1;
+
+    const diag = Math.hypot(W, H) * 0.75;
+    const colW = unit * 3;
+    const rowH = unit * 2;
+    const minC = Math.floor((-diag + phasePx) / colW) - 1;
+    const maxC = Math.ceil((diag + phasePx) / colW) + 1;
+    const minR = Math.floor((-diag + phasePx * 0.7) / rowH) - 1;
+    const maxR = Math.ceil((diag + phasePx * 0.7) / rowH) + 1;
+
+    targetCtx.beginPath();
+    for (let r = minR; r <= maxR; r++) {
+        const y = r * rowH;
+        const isEven = ((r % 2) + 2) % 2 === 0;
+        for (let c = minC; c <= maxC; c++) {
+            const x = c * colW;
+            if (isEven) {
+                targetCtx.rect(x, y, unit * 2, unit);
+                targetCtx.rect(x, y + unit, unit * 2, unit);
+                targetCtx.rect(x + unit * 2, y, unit, unit * 2);
+            } else {
+                targetCtx.rect(x, y, unit, unit * 2);
+                targetCtx.rect(x + unit, y, unit * 2, unit);
+                targetCtx.rect(x + unit, y + unit, unit * 2, unit);
+            }
+        }
+    }
+    targetCtx.stroke();
+    targetCtx.restore();
+}
+
+// Výpočet hodnoty čiernej priamo zo surového vzorkovacieho plátna kamery (s mapovaním cez Region of Interest)
+function sampleRawDarknessAt(nx, ny, sampleData, sW, sH, invert, whiteGate, blackGain, useRoi = true) {
+    const rx = useRoi ? (state.roi.x + nx * state.roi.w) : nx;
+    const ry = useRoi ? (state.roi.y + ny * state.roi.h) : ny;
+
+    if (state.simActive && !state.camActive) {
+        const dist = Math.hypot((rx - state.mouseNormX) * 1.35, ry - state.mouseNormY);
+        const wave = 0.12 * Math.sin(rx * 6 + state.simTime * 2.2) * Math.cos(ry * 5 - state.simTime * 1.7);
+        let d = Math.max(0, 1 - dist * 2.6 + wave);
+        if (invert) d = 1 - d;
+        if (d <= whiteGate) return 0;
+        return Math.min(1, ((d - whiteGate) / (1 - whiteGate + 0.001)) * blackGain);
+    }
+
+    if (!sampleData) return 0;
+
+    const clampedX = Math.max(0, Math.min(0.999, rx));
+    const clampedY = Math.max(0, Math.min(0.999, ry));
+    const px = Math.floor(clampedX * sW);
+    const py = Math.floor(clampedY * sH);
+    const idx = (py * sW + px) * 4;
+
+    const r = sampleData[idx];
+    const g = sampleData[idx + 1];
+    const b = sampleData[idx + 2];
+    const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+    let d = invert ? luma : (1 - luma);
+    if (d <= whiteGate) return 0;
+    return Math.min(1, ((d - whiteGate) / (1 - whiteGate + 0.001)) * blackGain);
+}
+
+// Aktualizácia 1:2 dlažbovej mapy čiernej z kamery / simulácie + živý náhľad s ROI
+function updateCameraTileMap(W, H, unit, phasePx, angleRad) {
+    const whiteGate = parseInt(document.getElementById('whiteGate').value) / 100;
+    const blackGain = parseInt(document.getElementById('blackGain').value) / 10;
+    const smooth = parseInt(document.getElementById('camSmooth').value) / 100;
+    const lerpFactor = Math.max(0.05, 1 - smooth * 0.92);
+    const mirror = document.getElementById('mirrorCam').checked;
+    const invert = document.getElementById('invertCam').checked;
+
+    let sampleData = null;
+    const sW = 160;
+    const sH = 120;
+
+    if (state.camActive && webcamVideo.readyState >= 2) {
+        camSampleCanvas.width = sW;
+        camSampleCanvas.height = sH;
+        camSampleCtx.save();
+        if (mirror) {
+            camSampleCtx.translate(sW, 0);
+            camSampleCtx.scale(-1, 1);
+        }
+        camSampleCtx.drawImage(webcamVideo, 0, 0, sW, sH);
+        camSampleCtx.restore();
+        sampleData = camSampleCtx.getImageData(0, 0, sW, sH).data;
+    }
+
+    const activeKeys = new Set();
+    let totalDarkness = 0;
+    let brickCount = 0;
+
+    // Prejdeme všetky viditeľné tehličky v 1:2 väzbe na plátne
+    const diag = Math.hypot(W, H) * 0.65;
+    const colW = unit * 3;
+    const rowH = unit * 2;
+    const minC = Math.floor((-diag + phasePx) / colW) - 1;
+    const maxC = Math.ceil((diag + phasePx) / colW) + 1;
+    const minR = Math.floor((-diag + phasePx * 0.7) / rowH) - 1;
+    const maxR = Math.ceil((diag + phasePx * 0.7) / rowH) + 1;
+
+    const cos = Math.cos(angleRad);
+    const sin = Math.sin(angleRad);
+    const originX = W / 2;
+    const originY = H / 2;
+
+    const evaluateBrick = (blockCol, blockRow, subId, bx, by, bw, bh) => {
+        const key = `${blockCol}_${blockRow}_${subId}`;
+        activeKeys.add(key);
+
+        // Stred tehly v lokálnych súradniciach dlažby -> prevod na obrazovku (0..1)
+        const lcx = bx + bw * 0.5 - phasePx;
+        const lcy = by + bh * 0.5 - phasePx * 0.7;
+        const sx = originX + lcx * cos - lcy * sin;
+        const sy = originY + lcx * sin + lcy * cos;
+
+        const nx = sx / Math.max(1, W);
+        const ny = sy / Math.max(1, H);
+
+        // 3-bodové vzorkovanie pozdĺž tehličky (stred + oba konce)
+        const offX = (bw > bh ? bw * 0.3 : 0);
+        const offY = (bh > bw ? bh * 0.3 : 0);
+        const sx1 = originX + (lcx - offX) * cos - (lcy - offY) * sin;
+        const sy1 = originY + (lcx - offX) * sin + (lcy - offY) * cos;
+        const sx2 = originX + (lcx + offX) * cos - (lcy + offY) * sin;
+        const sy2 = originY + (lcx + offX) * sin + (lcy + offY) * cos;
+
+        let targetD = 0;
+        if (state.camActive || state.simActive) {
+            const d0 = sampleRawDarknessAt(nx, ny, sampleData, sW, sH, invert, whiteGate, blackGain);
+            const d1 = sampleRawDarknessAt(sx1 / Math.max(1, W), sy1 / Math.max(1, H), sampleData, sW, sH, invert, whiteGate, blackGain);
+            const d2 = sampleRawDarknessAt(sx2 / Math.max(1, W), sy2 / Math.max(1, H), sampleData, sW, sH, invert, whiteGate, blackGain);
+            targetD = (d0 * 0.5 + d1 * 0.25 + d2 * 0.25);
+        }
+
+        const prevD = state.brickDarknessMap.get(key) || 0;
+        const nextD = prevD + (targetD - prevD) * lerpFactor;
+        state.brickDarknessMap.set(key, nextD);
+
+        if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1) {
+            totalDarkness += nextD;
+            brickCount++;
+        }
+    };
+
+    for (let r = minR; r <= maxR; r++) {
+        const y = r * rowH;
+        const isEven = ((r % 2) + 2) % 2 === 0;
+        for (let c = minC; c <= maxC; c++) {
+            const x = c * colW;
+            if (isEven) {
+                evaluateBrick(c, r, 0, x, y, unit * 2, unit);
+                evaluateBrick(c, r, 1, x, y + unit, unit * 2, unit);
+                evaluateBrick(c, r, 2, x + unit * 2, y, unit, unit * 2);
+            } else {
+                evaluateBrick(c, r, 0, x, y, unit, unit * 2);
+                evaluateBrick(c, r, 1, x + unit, y, unit * 2, unit);
+                evaluateBrick(c, r, 2, x + unit, y + unit, unit * 2, unit);
+            }
+        }
+    }
+
+    // Odstránime neaktívne kľúče mimo obrazovky
+    for (const k of state.brickDarknessMap.keys()) {
+        if (!activeKeys.has(k)) state.brickDarknessMap.delete(k);
+    }
+
+    const avgPct = brickCount > 0 ? Math.round((totalDarkness / brickCount) * 100) : 0;
+    document.getElementById('avgDarknessVal').textContent = `Čierna: ${avgPct}%`;
+
+    // Vykreslenie živého náhľadu matice v ľavom paneli
+    const pW = camPreviewCanvas.width;
+    const pH = camPreviewCanvas.height;
+    const showRoiRaw = document.getElementById('showRoiRaw').checked;
+
+    camPreviewCtx.fillStyle = '#ffffff';
+    camPreviewCtx.fillRect(0, 0, pW, pH);
+
+    if (showRoiRaw && state.camActive && webcamVideo.readyState >= 2) {
+        camPreviewCtx.save();
+        if (mirror) {
+            camPreviewCtx.translate(pW, 0);
+            camPreviewCtx.scale(-1, 1);
+        }
+        camPreviewCtx.drawImage(webcamVideo, 0, 0, pW, pH);
+        camPreviewCtx.restore();
+    } else {
+        const previewScale = Math.max(10, Math.round(unit * (pW / Math.max(400, W)) * 1.4));
+        const pColW = previewScale * 3;
+        const pRowH = previewScale * 2;
+        const pCols = Math.ceil(pW / pColW) + 1;
+        const pRows = Math.ceil(pH / pRowH) + 1;
+
+        for (let r = 0; r < pRows; r++) {
+            const py = r * pRowH;
+            const isEven = r % 2 === 0;
+            for (let c = 0; c < pCols; c++) {
+                const px = c * pColW;
+                const drawPreviewBrick = (bx, by, bw, bh) => {
+                    const cx = (bx + bw * 0.5) / pW;
+                    const cy = (by + bh * 0.5) / pH;
+                    let d = 0;
+                    if (state.camActive || state.simActive) {
+                        // Náhľad ukazuje celý záber kamery (useRoi = false), aby bolo jasné, odkiaľ vyberáme výrez
+                        d = sampleRawDarknessAt(cx, cy, sampleData, sW, sH, invert, whiteGate, blackGain, false);
+                    }
+                    const shade = Math.round(255 * (1 - d));
+                    camPreviewCtx.fillStyle = `rgb(${shade},${shade},${shade})`;
+                    camPreviewCtx.fillRect(bx, by, bw, bh);
+                    camPreviewCtx.strokeStyle = 'rgba(0,0,0,0.18)';
+                    camPreviewCtx.lineWidth = 0.75;
+                    camPreviewCtx.strokeRect(bx, by, bw, bh);
+                };
+
+                if (isEven) {
+                    drawPreviewBrick(px, py, previewScale * 2, previewScale);
+                    drawPreviewBrick(px, py + previewScale, previewScale * 2, previewScale);
+                    drawPreviewBrick(px + previewScale * 2, py, previewScale, previewScale * 2);
+                } else {
+                    drawPreviewBrick(px, py, previewScale, previewScale * 2);
+                    drawPreviewBrick(px + previewScale, py, previewScale * 2, previewScale);
+                    drawPreviewBrick(px + previewScale, py + previewScale, previewScale * 2, previewScale);
+                }
+            }
+        }
+    }
+
+    // Vykreslenie rámika Region of Interest (ROI) na náhľad kamery
+    const rx = state.roi.x * pW;
+    const ry = state.roi.y * pH;
+    const rw = state.roi.w * pW;
+    const rh = state.roi.h * pH;
+    const isCropped = state.roi.x > 0.005 || state.roi.y > 0.005 || state.roi.w < 0.995 || state.roi.h < 0.995;
+
+    if (isCropped || state.roiDragging) {
+        camPreviewCtx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        camPreviewCtx.fillRect(0, 0, pW, ry);
+        camPreviewCtx.fillRect(0, ry + rh, pW, pH - (ry + rh));
+        camPreviewCtx.fillRect(0, ry, rx, rh);
+        camPreviewCtx.fillRect(rx + rw, ry, pW - (rx + rw), rh);
+    }
+
+    camPreviewCtx.strokeStyle = '#10b981';
+    camPreviewCtx.lineWidth = 2;
+    camPreviewCtx.strokeRect(rx + 1, ry + 1, Math.max(2, rw - 2), Math.max(2, rh - 2));
+}
+
+// Vygenerovanie offscreen rastrovej predlohy písma (plné jadro + obrys)
+function ensureGlyphMasks(W, H, text, fontFamily, fontSize, tracking, outlineThick, fgColor, accentColor) {
+    const cacheKey = `${W}x${H}|${text}|${fontFamily}|${fontSize}|${tracking}|${outlineThick}|${fgColor}|${accentColor}|${state.panX.toFixed(1)},${state.panY.toFixed(1)},${state.zoom.toFixed(2)}`;
+    if (state.glyphCacheKey === cacheKey && state.coreMask && state.outlineMask) {
+        return;
+    }
+
+    if (!state.coreMask) state.coreMask = document.createElement('canvas');
+    if (!state.outlineMask) state.outlineMask = document.createElement('canvas');
+
+    state.coreMask.width = W;
+    state.coreMask.height = H;
+    state.outlineMask.width = W;
+    state.outlineMask.height = H;
+
+    const cCtx = state.coreMask.getContext('2d');
+    const oCtx = state.outlineMask.getContext('2d');
+    cCtx.clearRect(0, 0, W, H);
+    oCtx.clearRect(0, 0, W, H);
+
+    const lines = text.split('\n');
+    const lineHeight = fontSize * 1.08;
+
+    const drawTextPass = (targetCtx, isStroke) => {
+        targetCtx.save();
+        targetCtx.translate(state.panX, state.panY);
+        targetCtx.scale(state.zoom, state.zoom);
+        targetCtx.font = `900 ${fontSize}px ${fontFamily}`;
+        targetCtx.textBaseline = 'top';
+
+        if (isStroke) {
+            targetCtx.strokeStyle = accentColor;
+            targetCtx.lineWidth = Math.max(1, outlineThick);
+            targetCtx.lineJoin = 'round';
+        } else {
+            targetCtx.fillStyle = fgColor;
+        }
+
+        let maxLineW = 0;
+        lines.forEach((line, lineIdx) => {
+            let cursorX = 0;
+            const cursorY = lineIdx * lineHeight;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (isStroke) {
+                    targetCtx.strokeText(ch, cursorX, cursorY);
+                } else {
+                    targetCtx.fillText(ch, cursorX, cursorY);
+                }
+                cursorX += targetCtx.measureText(ch).width + tracking;
+            }
+            if (cursorX > maxLineW) maxLineW = cursorX;
+        });
+
+        targetCtx.restore();
+        return {
+            minX: Math.max(0, Math.floor(state.panX - fontSize * 0.3 * state.zoom)),
+            minY: Math.max(0, Math.floor(state.panY - fontSize * 0.3 * state.zoom)),
+            maxX: Math.min(W, Math.ceil(state.panX + (maxLineW + fontSize * 0.5) * state.zoom)),
+            maxY: Math.min(H, Math.ceil(state.panY + (lines.length * lineHeight + fontSize * 0.4) * state.zoom))
+        };
+    };
+
+    state.glyphBounds = drawTextPass(cCtx, false);
+    drawTextPass(oCtx, true);
+    state.glyphCacheKey = cacheKey;
+}
+
+// Hlavné vykreslenie scény
+function render() {
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    if (mainCanvas.width !== W || mainCanvas.height !== H) {
+        mainCanvas.width = W;
+        mainCanvas.height = H;
+    }
+    const theme = state.customColors;
+    const text = document.getElementById('textInput').value || ' ';
+    const fontFamily = state.customFontName ? `'${state.customFontName}', sans-serif` : document.getElementById('fontFamily').value;
+    const fontSize = parseInt(document.getElementById('fontSize').value);
+    const tracking = parseInt(document.getElementById('tracking').value);
+
+    const maxSpacingPct = parseInt(document.getElementById('param1').value) / 100;
+    const maxCopies = parseInt(document.getElementById('param2').value);
+    const maxOutlineMix = parseInt(document.getElementById('param3').value) / 100;
+    const outlineThick = parseInt(document.getElementById('outlineThick').value);
+    const useEchoGradient = document.getElementById('echoGradient').checked;
+
+    const modSpacing = document.getElementById('modSpacing').checked;
+    const modCopies = document.getElementById('modCopies').checked;
+    const modOutline = document.getElementById('modOutline').checked;
+    const modBrickShift = document.getElementById('modBrickShift').checked;
+
+    const unit = parseInt(document.getElementById('gridScale').value);
+    const basePhase = parseInt(document.getElementById('gridPhase').value);
+    const phasePx = basePhase + state.phaseAnim;
+    const angleRad = (parseInt(document.getElementById('gridAngle').value) * Math.PI) / 180;
+
+    const showGrid = document.getElementById('showGrid').checked;
+    const showCamOverlay = document.getElementById('showCamGridOverlay').checked;
+    const showBrickPercent = document.getElementById('showBrickPercent').checked;
+
+    // 1. Vyčistenie pozadia
+    ctx.fillStyle = theme.bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // 2. Aktualizácia kamerovej mapy čiernej v 1:2 dlažbe
+    updateCameraTileMap(W, H, unit, phasePx, angleRad);
+
+    // 3. Voliteľné zobrazenie odtieňov šedej v 1:2 dlažbe na plátne (1:1 s osnovou)
+    if (showCamOverlay || showBrickPercent) {
+        ctx.save();
+        ctx.translate(W / 2, H / 2);
+        ctx.rotate(angleRad);
+        ctx.translate(-phasePx, -phasePx * 0.7);
+
+        const diag = Math.hypot(W, H) * 0.75;
+        const colW = unit * 3;
+        const rowH = unit * 2;
+        const minC = Math.floor((-diag + phasePx) / colW) - 1;
+        const maxC = Math.ceil((diag + phasePx) / colW) + 1;
+        const minR = Math.floor((-diag + phasePx * 0.7) / rowH) - 1;
+        const maxR = Math.ceil((diag + phasePx * 0.7) / rowH) + 1;
+        const fontPx = Math.max(8, Math.min(14, Math.floor(unit * 0.28)));
+        ctx.font = `700 ${fontPx}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        for (let r = minR; r <= maxR; r++) {
+            const y = r * rowH;
+            const isEven = ((r % 2) + 2) % 2 === 0;
+            for (let c = minC; c <= maxC; c++) {
+                const x = c * colW;
+                const drawShadeBrick = (subId, bx, by, bw, bh) => {
+                    const d = state.brickDarknessMap.get(`${c}_${r}_${subId}`) || 0;
+                    if (showCamOverlay && d > 0.01) {
+                        ctx.fillStyle = `rgba(120, 120, 130, ${(d * 0.28).toFixed(3)})`;
+                        ctx.fillRect(bx, by, bw, bh);
+                    }
+                    if (showBrickPercent && unit >= 24) {
+                        const pct = Math.round(d * 100);
+                        ctx.fillStyle = d > 0.5 ? 'rgba(255, 255, 255, 0.85)' : 'rgba(113, 113, 122, 0.75)';
+                        ctx.fillText(`${pct}%`, bx + bw * 0.5, by + bh * 0.5);
+                    }
+                };
+                if (isEven) {
+                    drawShadeBrick(0, x, y, unit * 2, unit);
+                    drawShadeBrick(1, x, y + unit, unit * 2, unit);
+                    drawShadeBrick(2, x + unit * 2, y, unit, unit * 2);
+                } else {
+                    drawShadeBrick(0, x, y, unit, unit * 2);
+                    drawShadeBrick(1, x + unit, y, unit * 2, unit);
+                    drawShadeBrick(2, x + unit, y + unit, unit * 2, unit);
+                }
+            }
+        }
+        ctx.restore();
+    }
+
+    // 4. Príprava masiek písma
+    ensureGlyphMasks(W, H, text, fontFamily, fontSize, tracking, outlineThick, theme.fg, theme.accent);
+
+    // 5. Vykreslenie Kinetického Echa po jednotlivých 1:2 tehlách v oblasti textu
+    const margin = unit * 4 + maxSpacingPct * unit * 2;
+    const minX = Math.max(0, state.glyphBounds.minX - margin);
+    const minY = Math.max(0, state.glyphBounds.minY - margin);
+    const maxX = Math.min(W, state.glyphBounds.maxX + margin);
+    const maxY = Math.min(H, state.glyphBounds.maxY + margin);
+
+    const originX = W / 2;
+    const originY = H / 2;
+    const cos = Math.cos(angleRad);
+    const sin = Math.sin(angleRad);
+
+    // Zistíme rozsah blokov pokrývajúcich text
+    const corners = [
+        [minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]
+    ];
+    let minLX = Infinity, maxLX = -Infinity, minLY = Infinity, maxLY = -Infinity;
+    const invCos = Math.cos(-angleRad);
+    const invSin = Math.sin(-angleRad);
+    for (const [cx, cy] of corners) {
+        const dx = cx - originX;
+        const dy = cy - originY;
+        const lx = dx * invCos - dy * invSin + phasePx;
+        const ly = dx * invSin + dy * invCos + phasePx * 0.7;
+        if (lx < minLX) minLX = lx;
+        if (lx > maxLX) maxLX = lx;
+        if (ly < minLY) minLY = ly;
+        if (ly > maxLY) maxLY = ly;
+    }
+
+    const colW = unit * 3;
+    const rowH = unit * 2;
+    const bMinC = Math.floor(minLX / colW) - 1;
+    const bMaxC = Math.ceil(maxLX / colW) + 1;
+    const bMinR = Math.floor(minLY / rowH) - 1;
+    const bMaxR = Math.ceil(maxLY / rowH) + 1;
+
+    const isInteractive = state.camActive || state.simActive;
+
+    ctx.save();
+    ctx.translate(originX, originY);
+    ctx.rotate(angleRad);
+    ctx.translate(-phasePx, -phasePx * 0.7);
+
+    const renderBrickEcho = (blockCol, blockRow, subId, bx, by, bw, bh, isHoriz) => {
+        const darkness = isInteractive
+            ? (state.brickDarknessMap.get(`${blockCol}_${blockRow}_${subId}`) || 0)
+            : 1.0;
+
+        // Vypočítame aktívne parametre pre túto konkrétnu tehličku
+        const spacingFactor = modSpacing ? (darkness * maxSpacingPct) : (isInteractive ? 0 : maxSpacingPct);
+        const copiesCount = modCopies
+            ? Math.round(darkness * maxCopies)
+            : (isInteractive ? 0 : maxCopies);
+        const outlineMix = modOutline ? (darkness * maxOutlineMix) : (isInteractive ? 0 : maxOutlineMix);
+        const shiftFactor = modBrickShift ? (darkness * 0.45) : 0;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(bx, by, bw, bh);
+        ctx.clip();
+
+        // Spätná transformácia do súradníc obrazovky, kde sú uložené masky písma
+        ctx.translate(phasePx, phasePx * 0.7);
+        ctx.rotate(-angleRad);
+        ctx.translate(-originX, -originY);
+
+        // Smerový vektor tehličky na obrazovke (horizontálna = pozdĺž X tehly, vertikálna = pozdĺž Y tehly)
+        const dirX = isHoriz ? cos : -sin;
+        const dirY = isHoriz ? sin : cos;
+        const stepPx = spacingFactor * unit * 0.45;
+        const baseShift = shiftFactor * unit * ((blockCol + blockRow + subId) % 2 === 0 ? 1 : -1);
+
+        // 1. Základné jadro písma (slabne, ak prechádza do čistého obrysu)
+        const coreAlpha = Math.max(0, 1 - outlineMix * 1.15);
+        if (coreAlpha > 0.02) {
+            ctx.globalAlpha = coreAlpha;
+            ctx.drawImage(state.coreMask, baseShift * dirX, baseShift * dirY);
+        }
+
+        // 2. Základný obrys (ak prechádzame z plného jadra do obrysu)
+        if (outlineMix > 0.02) {
+            ctx.globalAlpha = Math.min(1, outlineMix * 1.25);
+            ctx.drawImage(state.outlineMask, baseShift * dirX, baseShift * dirY);
+        }
+
+        // 3. Smerové vrstvy Kinetického Echa
+        if (copiesCount > 0 && stepPx > 0.2) {
+            for (let i = 1; i <= copiesCount; i++) {
+                const offset = i * stepPx;
+                const alpha = useEchoGradient
+                    ? Math.max(0.08, 1 - i / (copiesCount + 1))
+                    : 1.0;
+                ctx.globalAlpha = alpha;
+                ctx.drawImage(state.outlineMask, baseShift * dirX + dirX * offset, baseShift * dirY + dirY * offset);
+                ctx.drawImage(state.outlineMask, baseShift * dirX - dirX * offset, baseShift * dirY - dirY * offset);
+            }
+        }
+
+        ctx.globalAlpha = 1.0;
+        ctx.restore();
+    };
+
+    for (let r = bMinR; r <= bMaxR; r++) {
+        const y = r * rowH;
+        const isEven = ((r % 2) + 2) % 2 === 0;
+        for (let c = bMinC; c <= bMaxC; c++) {
+            const x = c * colW;
+            if (isEven) {
+                renderBrickEcho(c, r, 0, x, y, unit * 2, unit, true);
+                renderBrickEcho(c, r, 1, x, y + unit, unit * 2, unit, true);
+                renderBrickEcho(c, r, 2, x + unit * 2, y, unit, unit * 2, false);
+            } else {
+                renderBrickEcho(c, r, 0, x, y, unit, unit * 2, false);
+                renderBrickEcho(c, r, 1, x + unit, y, unit * 2, unit, true);
+                renderBrickEcho(c, r, 2, x + unit, y + unit, unit * 2, unit, true);
+            }
+        }
+    }
+
+    ctx.restore();
+
+    // 6. Voliteľná skrytá osnova 1:2 dlažby
+    if (showGrid) {
+        drawParquetGridOverlay(ctx, W, H, unit, phasePx, angleRad, theme.grid);
+    }
+}
+
+// Animačná slučka pre živú kameru, simuláciu myšou a plávanie osnovy
+function startLoop() {
+    const tick = () => {
+        const animatePhase = document.getElementById('animatePhase').checked;
+        if (animatePhase) {
+            state.phaseAnim = (state.phaseAnim + 0.6) % 10000;
+        }
+        if (state.simActive) {
+            state.simTime += 0.03;
+        }
+        if (state.camActive || state.simActive || animatePhase) {
+            render();
+        }
+        state.animId = requestAnimationFrame(tick);
+    };
+    if (state.animId) cancelAnimationFrame(state.animId);
+    state.animId = requestAnimationFrame(tick);
+}
+
+// Načítanie zoznamu dostupných kamier (vrátane externých ako Insta360)
+async function refreshCameraList() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter(d => d.kind === 'videoinput');
+        const select = document.getElementById('cameraSelect');
+        const prevVal = state.selectedDeviceId || select.value;
+
+        select.innerHTML = '';
+        if (videoInputs.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'Žiadna kamera nenájdená';
+            select.appendChild(opt);
+            return;
+        }
+
+        videoInputs.forEach((dev, idx) => {
+            const opt = document.createElement('option');
+            opt.value = dev.deviceId;
+            opt.textContent = dev.label || `Kamera ${idx + 1} (povoľ prístup pre názov)`;
+            select.appendChild(opt);
+        });
+
+        // Ak je v zozname Insta360 a používateľ ešte nevybral inú, ponúkneme ju alebo zachováme výber
+        if (prevVal && videoInputs.some(d => d.deviceId === prevVal)) {
+            select.value = prevVal;
+        } else {
+            const insta = videoInputs.find(d => /insta360/i.test(d.label));
+            select.value = insta ? insta.deviceId : videoInputs[0].deviceId;
+            state.selectedDeviceId = select.value;
+        }
+    } catch (err) {
+        console.error('Chyba načítania zoznamu kamier:', err);
+    }
+}
+
+// Zastavenie aktuálneho video streamu
+function stopCameraStream() {
+    if (state.camStream) {
+        state.camStream.getTracks().forEach(t => t.stop());
+        state.camStream = null;
+    }
+    webcamVideo.srcObject = null;
+}
+
+// Spustenie vybranej kamery podľa deviceId
+async function startCameraStream(deviceId) {
+    const btn = document.getElementById('toggleCameraBtn');
+    const badge = document.getElementById('camStatusBadge');
+
+    stopCameraStream();
+
+    const videoConstraints = deviceId
+        ? { deviceId: { exact: deviceId }, width: { ideal: 640 }, height: { ideal: 480 } }
+        : { width: { ideal: 640 }, height: { ideal: 480 } };
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: videoConstraints,
+            audio: false
+        });
+        state.camStream = stream;
+        webcamVideo.srcObject = stream;
+        await webcamVideo.play();
+        state.camActive = true;
+        state.simActive = false;
+
+        // Zistíme skutočne aktívne deviceId a po udelení povolenia načítame presné názvy kamier
+        const activeTrack = stream.getVideoTracks()[0];
+        if (activeTrack && activeTrack.getSettings && activeTrack.getSettings().deviceId) {
+            state.selectedDeviceId = activeTrack.getSettings().deviceId;
+        }
+        await refreshCameraList();
+
+        btn.innerHTML = '<span>⏹ Zastaviť kameru</span>';
+        btn.className = 'flex-1 py-2 px-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center gap-1.5';
+        badge.textContent = 'KAMERA LIVE';
+        badge.className = 'px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 rounded';
+    } catch (err) {
+        console.error('Chyba spustenia kamery:', err);
+        state.camActive = false;
+        state.simActive = true;
+        badge.textContent = 'SIMULÁCIA (BEZ KAMERY)';
+        badge.className = 'px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded';
+    }
+    render();
+}
+
+// Spustenie / zastavenie webkamery
+async function toggleCamera() {
+    const btn = document.getElementById('toggleCameraBtn');
+    const badge = document.getElementById('camStatusBadge');
+
+    if (state.camActive) {
+        state.camActive = false;
+        stopCameraStream();
+        btn.innerHTML = '<span>📷 Spustiť kameru</span>';
+        btn.className = 'flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow transition flex items-center justify-center gap-1.5';
+        badge.textContent = state.simActive ? 'SIMULÁCIA' : 'MANUÁLNE';
+        badge.className = state.simActive
+            ? 'px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded'
+            : 'px-2 py-0.5 text-[10px] font-bold bg-zinc-200 text-zinc-700 rounded';
+        render();
+        return;
+    }
+
+    const select = document.getElementById('cameraSelect');
+    const chosenId = select.value || state.selectedDeviceId || '';
+    await startCameraStream(chosenId);
+}
+
+// Synchronizácia hodnôt popiskov a event listenerov
+function bindControls() {
+    const syncLabels = () => {
+        document.getElementById('whiteGateVal').textContent = `${document.getElementById('whiteGate').value}%`;
+        document.getElementById('blackGainVal').textContent = `${(parseInt(document.getElementById('blackGain').value) / 10).toFixed(1)}×`;
+        document.getElementById('camSmoothVal').textContent = `${document.getElementById('camSmooth').value}%`;
+        document.getElementById('param1Val').textContent = `${document.getElementById('param1').value}%`;
+        document.getElementById('param2Val').textContent = `${document.getElementById('param2').value} vrstiev`;
+        document.getElementById('param3Val').textContent = `${document.getElementById('param3').value}%`;
+        document.getElementById('outlineThickVal').textContent = `${document.getElementById('outlineThick').value} px`;
+        document.getElementById('fontSizeVal').textContent = `${document.getElementById('fontSize').value} px`;
+        document.getElementById('trackingVal').textContent = `${document.getElementById('tracking').value} px`;
+        document.getElementById('gridScaleVal').textContent = `${document.getElementById('gridScale').value} px`;
+        document.getElementById('gridPhaseVal').textContent = `${document.getElementById('gridPhase').value} px`;
+        document.getElementById('gridAngleVal').textContent = `${document.getElementById('gridAngle').value}°`;
+    };
+
+    document.querySelectorAll('#sidebar input, #sidebar select, #sidebar textarea').forEach(el => {
+        el.addEventListener('input', () => {
+            if (el.id === 'camResolution') {
+                const v = el.value;
+                document.getElementById('gridScale').value = v;
+                document.getElementById('camColsVal').textContent = `${v} px`;
+            } else if (el.id === 'gridScale') {
+                document.getElementById('camColsVal').textContent = `${el.value} px`;
+            }
+            syncLabels();
+            render();
+        });
+        el.addEventListener('change', () => {
+            syncLabels();
+            render();
+        });
+    });
+
+    document.getElementById('toggleCameraBtn').addEventListener('click', toggleCamera);
+
+    // Okamžité prepnutie kamery (napr. na Insta360) bez nutnosti reštartovať stránku
+    document.getElementById('cameraSelect').addEventListener('change', async (e) => {
+        state.selectedDeviceId = e.target.value;
+        if (state.camActive) {
+            await startCameraStream(state.selectedDeviceId);
+        }
+    });
+
+    document.getElementById('refreshCamerasBtn').addEventListener('click', refreshCameraList);
+
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+        navigator.mediaDevices.addEventListener('devicechange', refreshCameraList);
+    }
+
+    document.getElementById('toggleSimBtn').addEventListener('click', () => {
+        state.simActive = !state.simActive;
+        const badge = document.getElementById('camStatusBadge');
+        if (!state.camActive) {
+            badge.textContent = state.simActive ? 'SIMULÁCIA MYŠOU' : 'MANUÁLNE';
+            badge.className = state.simActive
+                ? 'px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded'
+                : 'px-2 py-0.5 text-[10px] font-bold bg-zinc-200 text-zinc-700 rounded';
+        }
+        render();
+    });
+
+    document.querySelectorAll('.sample-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('textInput').value = btn.dataset.sample;
+            render();
+        });
+    });
+
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            state.theme = btn.dataset.theme;
+            const preset = THEMES[state.theme] || THEMES.bw;
+            state.customColors = { ...preset };
+            document.getElementById('bgColorPicker').value = preset.bg;
+            document.getElementById('fgColorPicker').value = preset.fg;
+            document.getElementById('accentColorPicker').value = preset.accent;
+            render();
+        });
+    });
+
+    // Vlastné color pickery
+    document.getElementById('bgColorPicker').addEventListener('input', (e) => {
+        state.customColors.bg = e.target.value;
+        state.customColors.grid = computeGridStrokeColor(e.target.value);
+        render();
+    });
+    document.getElementById('fgColorPicker').addEventListener('input', (e) => {
+        state.customColors.fg = e.target.value;
+        render();
+    });
+    document.getElementById('accentColorPicker').addEventListener('input', (e) => {
+        state.customColors.accent = e.target.value;
+        render();
+    });
+
+    // Interaktívny výber Region of Interest (ROI) ťahaním myšou v náhľade kamery
+    const updateRoiLabel = () => {
+        const x1 = Math.round(state.roi.x * 100);
+        const y1 = Math.round(state.roi.y * 100);
+        const x2 = Math.round((state.roi.x + state.roi.w) * 100);
+        const y2 = Math.round((state.roi.y + state.roi.h) * 100);
+        document.getElementById('roiCoordsVal').textContent = `ROI: ${x1}%, ${y1}% → ${x2}%, ${y2}%`;
+    };
+
+    const getPreviewNormCoords = (e) => {
+        const rect = camPreviewCanvas.getBoundingClientRect();
+        const nx = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)));
+        const ny = Math.max(0, Math.min(1, (e.clientY - rect.top) / Math.max(1, rect.height)));
+        return { nx, ny };
+    };
+
+    camPreviewCanvas.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        const { nx, ny } = getPreviewNormCoords(e);
+        state.roiDragging = true;
+        state.roiStartX = nx;
+        state.roiStartY = ny;
+        state.roi = { x: nx, y: ny, w: 0.02, h: 0.02 };
+        updateRoiLabel();
+        render();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (state.roiDragging) {
+            const { nx, ny } = getPreviewNormCoords(e);
+            const minX = Math.min(state.roiStartX, nx);
+            const minY = Math.min(state.roiStartY, ny);
+            const w = Math.max(0.05, Math.abs(nx - state.roiStartX));
+            const h = Math.max(0.05, Math.abs(ny - state.roiStartY));
+            state.roi = {
+                x: Math.min(0.95, minX),
+                y: Math.min(0.95, minY),
+                w: Math.min(1 - minX, w),
+                h: Math.min(1 - minY, h)
+            };
+            updateRoiLabel();
+            render();
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (state.roiDragging) {
+            state.roiDragging = false;
+            render();
+        }
+    });
+
+    document.getElementById('resetRoiBtn').addEventListener('click', () => {
+        state.roi = { x: 0, y: 0, w: 1, h: 1 };
+        updateRoiLabel();
+        render();
+    });
+
+    document.getElementById('fontUpload').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const buf = await file.arrayBuffer();
+            const fontName = 'UploadedCustomFont_' + Date.now();
+            const face = new FontFace(fontName, buf);
+            await face.load();
+            document.fonts.add(face);
+            state.customFontName = fontName;
+            render();
+        } catch (err) {
+            console.error('Chyba načítania písma:', err);
+        }
+    });
+
+    // Skrytie / zobrazenie ľavého panela
+    const sidebar = document.getElementById('sidebar');
+    const topControls = document.getElementById('topControls');
+    const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const kioskBtn = document.getElementById('kioskBtn');
+    const kioskHint = document.getElementById('kioskHint');
+    let sidebarHidden = false;
+    let kioskMode = false;
+    let hintTimer = null;
+
+    const showHint = (msg) => {
+        kioskHint.textContent = msg;
+        kioskHint.style.opacity = '1';
+        if (hintTimer) clearTimeout(hintTimer);
+        hintTimer = setTimeout(() => {
+            kioskHint.style.opacity = '0';
+        }, 3000);
+    };
+
+    const applySidebarVisibility = () => {
+        sidebar.style.transform = (sidebarHidden || kioskMode) ? 'translateX(-115%)' : 'translateX(0)';
+        toggleSidebarBtn.textContent = sidebarHidden ? '▶ Zobraziť panel' : '◀ Skryť panel';
+    };
+
+    const setKioskMode = (enabled) => {
+        kioskMode = enabled;
+        topControls.style.opacity = kioskMode ? '0' : '1';
+        topControls.style.pointerEvents = kioskMode ? 'none' : 'auto';
+        applySidebarVisibility();
+        if (kioskMode) {
+            showHint('Čistý režim — stlač kláves H alebo Esc pre návrat ovládania');
+        }
+    };
+
+    const toggleFullscreen = async () => {
+        try {
+            if (!document.fullscreenElement) {
+                await document.documentElement.requestFullscreen();
+            } else {
+                await document.exitFullscreen();
+            }
+        } catch (err) {
+            console.error('Chyba pri prepínaní celej obrazovky:', err);
+            showHint('Celú obrazovku povoľ otvorením stránky priamo na GitHub Pages (kláves F11).');
+        }
+    };
+
+    toggleSidebarBtn.addEventListener('click', () => {
+        sidebarHidden = !sidebarHidden;
+        applySidebarVisibility();
+    });
+
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+    kioskBtn.addEventListener('click', () => {
+        setKioskMode(!kioskMode);
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+        const isFs = !!document.fullscreenElement;
+        fullscreenBtn.textContent = isFs ? '✕ Ukončiť celú obrazovku' : '⛶ Celá obrazovka';
+        render();
+    });
+
+    // Klávesové skratky pre výstavu (mimo písania textu)
+    window.addEventListener('keydown', (e) => {
+        const tag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+        if (e.key === 'h' || e.key === 'H') {
+            setKioskMode(!kioskMode);
+        } else if (e.key === 'Escape' && kioskMode) {
+            setKioskMode(false);
+        } else if (e.key === 'f' || e.key === 'F') {
+            toggleFullscreen();
+        }
+    });
+
+    document.getElementById('resetViewBtn').addEventListener('click', () => {
+        state.panX = window.innerWidth > 768 ? 425 : 25;
+        state.panY = 110;
+        state.zoom = 1.0;
+        render();
+    });
+
+    // Pan & Zoom + sledovanie myši pre simuláciu čiernej siluety
+    mainCanvas.addEventListener('mousedown', (e) => {
+        state.isDragging = true;
+        state.dragStartX = e.clientX - state.panX;
+        state.dragStartY = e.clientY - state.panY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        state.mouseNormX = e.clientX / Math.max(1, window.innerWidth);
+        state.mouseNormY = e.clientY / Math.max(1, window.innerHeight);
+        if (state.isDragging) {
+            state.panX = e.clientX - state.dragStartX;
+            state.panY = e.clientY - state.dragStartY;
+            render();
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        state.isDragging = false;
+    });
+
+    mainCanvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.08 : 0.92;
+        const newZoom = Math.max(0.25, Math.min(4.0, state.zoom * factor));
+        state.panX = e.clientX - (e.clientX - state.panX) * (newZoom / state.zoom);
+        state.panY = e.clientY - (e.clientY - state.panY) * (newZoom / state.zoom);
+        state.zoom = newZoom;
+        render();
+    }, { passive: false });
+
+    window.addEventListener('resize', render);
+    syncLabels();
+}
+
+bindControls();
+refreshCameraList();
+render();
+startLoop();
+</script>
+
+</body>
+</html>
